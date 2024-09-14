@@ -1,0 +1,314 @@
+---
+title: "conflict"
+output: pdf_document
+date: "2023-04-19"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(repr)
+# Change plot size to 16 x 9
+options(repr.plot.width=16, repr.plot.height=9)
+```
+# gender&conflict project
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+## load pkgs and data
+library(dplyr)
+library(MASS) # for logit, help("polr")
+library(VGAM) # vglm
+library(ggplot2)
+library(nnet)
+library(lmtest)
+library(stargazer)
+library(texreg)
+library(xtable)
+library(haven) # for read_dta
+data <- read_dta("EJIR Full data.dta")
+
+```
+
+## reorder ordinal DVs
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+data$wecon <- factor(data$wecon, levels = c("0", "1", "2", "3"), ordered = T)
+data$wosoc <- factor(data$wosoc, levels = c("0", "1", "2", "3"), ordered = T)
+data$wopol <- factor(data$wopol, levels = c("0", "1", "2", "3"), ordered = T)
+# check
+str(data$wecon)
+str(data$wosoc)
+str(data$wopol)
+```
+
+## Create lagged variables
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+str(data$lsanction_hse_dur) ## NULL, the authors did not include this variable in this dataset
+
+# create lag sanction_hse_dur
+#library("dplyr")
+data <- data %>%                            # Add lagged column, lag sanction_hse_dur
+  group_by(ccode) %>%
+  mutate( lsanction_hse_dur= lag(sanction_hse_dur, n = 1, default = NA)) %>% 
+  as.data.frame()
+
+str(data$lsanction_hse_dur)
+
+# compare the original variable and the lagged variable
+str(data$sanction_hse_dur)
+str(data$lsanction_hse_dur) # the first is NA 
+```
+
+The authors use a one-year lag (t − 1) of the time-variant variables to mitigate any simultaneity issues between the dependent and independent variables. Specifically, lagged-IVs allow they to make sure that the independent variables temporally precede the dependent variables and thus eliminate any incorrect direction of inference.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+
+## convert integers 0 and 1 to dummy variables/ nominal variables
+### check the attributes
+str(data$lsanction_hse) ## lagged sanction variable
+str(data$lagwar) ##  Interstate War
+str(data$lagcwar) ## Civil War
+str(data$multilateral)## Multilateral Sanction 
+str(data$laghumansanction)## Humanitarian Sanction 
+str(data$lagpolity2) ## nominal political scores, democracy -10~10
+
+## binary variables for 3 levels of women's economic rights
+#data$lwecon1 <- factor(data$lwecon1, levels = c("0", "1"))
+#data$lwecon2 <- factor(data$lwecon2, levels = c("0", "1"))
+#data$lwecon3 <- factor(data$lwecon3, levels = c("0", "1"))
+
+## binary variables for 3 levels of women's social rights
+#data$lwosoc1 <- factor(data$lwosoc1, levels = c("0", "1"))
+#data$lwosoc2 <- factor(data$lwosoc2, levels = c("0", "1"))
+#data$lwosoc3 <- factor(data$lwosoc3, levels = c("0", "1"))
+
+## binary variables for 3 levels of women's political rights
+#data$lwopol1 <- factor(data$lwopol1, levels = c("0", "1"))
+#data$lwopol2 <- factor(data$lwopol2, levels = c("0", "1"))
+#data$lwopol3 <- factor(data$lwopol3, levels = c("0", "1"))
+
+#data$lsanction_hse <- factor(data$lsanction_hse, levels = c("0", "1"))
+#data$lagwar <- factor(data$lagwar, levels = c("0", "1"))
+#data$lagcwar <- factor(data$lagcwar, levels = c("0", "1"))
+
+data$wecon <- factor(data$wecon, levels = c("0", "1", "2", "3"), ordered = T)
+data$wopol <- factor(data$wopol, levels = c("0", "1", "2", "3"), ordered = T)
+data$wosoc <- factor(data$wosoc, levels = c("0", "1", "2", "3"), ordered = T)
+
+## Areas
+data$asia <- factor(data$asia, levels = c("0", "1"))
+data$lamerica <-  factor(data$lamerica, levels = c("0", "1"))
+data$ssafrica <- factor(data$ssafrica, levels = c("0", "1"))
+data$nafrme <- factor(data$nafrme, levels = c("0", "1"))
+```
+
+
+## Explore data
+```{r}
+# 3 DVs, plots
+jpeg(file="ecoplot.jpeg")
+plot(data$wecon, main="women's eocnomic rights",ylim =range(0, 2500), col = "darkred")
+dev.off()
+
+jpeg(file="poplot.jpeg")
+plot(data$wopol, main="women's political rights", ylim =range(0, 2500),col = "darkgreen")
+dev.off()
+
+jpeg(file="soplot.jpeg")
+plot(data$wosoc, main="women's social rights", ylim =range(0, 2500), col = "darkblue")
+dev.off()
+
+se <- summary(data$wecon) 
+ss <- summary(data$wosoc)
+sp <- summary(data$wopol)
+
+
+stargazer(se, ss, sp, type = "text")
+```
+
+```{r}
+#IVs
+## economic sanction
+
+png(file="sanctionplot.png")
+summary(data$lsanction_hse)
+plot(data$lsanction_hse, type = "p", lwd = 0.5,
+     main="Sanction",
+     xlab="A country in a year",
+     ylab="Sanction (dummy)") # most data are 0s
+dev.off()
+
+png(file="sanctioncost.png")
+plot(data$lagsanctioncost, type = "p", lwd = 0.5,
+     main="Sanction Cost",
+     xlab="A country in a year",
+     ylab="Sanction Cost")
+dev.off()
+
+png(file="duration.png")
+plot(data$lnsanction_hse_dur, type = "p", lwd = 0.5,
+     main="Sanction duration",
+     xlab="A country in a year",
+     ylab="Duration")
+dev.off()
+
+png(file="human.png")
+plot(data$laghumansanction, type = "p", lwd = 0.5,
+     main="Humanitarian Sanction",
+     xlab="A country in a year",
+     ylab="Sanction (dummy)")
+dev.off()
+
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+# difference female labor force participation
+
+### The authors use xtreg () in Stata for model 3 for fixed effects, so I will use plm() in R
+
+#install.packages("modelsummary" )
+#library("plm" )
+
+str(data$fem_labor_first) ## initial female labor score
+# fem.1 <- select(data1, 'fem_labor_first')
+# str(data1$wdifemlabor) ## The authors use DV d.wdifemlabor, but I only see wdifemlabor, I guess it is about differencing this variable.
+
+## They mentioned unit root issues: "diagnostic tests revealed that the Female Labor Participation variable has a strong unit root process. In order to correct for the lack of stationarity in this variable, we first-difference the data by subtracting the past value of the variable from the current value (Yt – Yt-1)."
+
+## create a new variable: d.wdifemlabor
+
+data <- data %>%                            # Add lagged column, lag wdifemlabor
+  group_by(ccode) %>%
+  dplyr::mutate(lwdifemlabor= dplyr::lag(wdifemlabor, n = 1, default = NA))
+
+data <- data %>%
+             mutate(d.wdifemlabor = wdifemlabor - lwdifemlabor)  # problem, this is calculated by 1970-2004 data minus 1969-2003 data. But instead it should be 1971-2005 - 1970-2004. The author did not provide me a complete dataset.
+
+data$wdifemlabor
+data$d.wdifemlabor
+```
+
+
+##dataset extension
+
+```{r}
+# add female fertility rate, female literacy rate, unemployment rate, female vulnerable employment rate, rate of female in industry, rate of female in service, rate of female in agriculture from the World Development Indicator of the World Bank.
+
+#install.packages("WDI")
+library(WDI)
+newdt <- WDI(indicator = c("SP.DYN.TFRT.IN","SE.ADT.LITR.FE.ZS","SL.UEM.TOTL.FE.ZS", "SL.AGR.EMPL.FE.ZS", "SL.IND.EMPL.FE.ZS","SL.SRV.EMPL.FE.ZS","SL.EMP.VULN.FE.ZS"), start = 1970, end = 2004, extra = T)
+names(newdt)[which(names(newdt) == "SP.DYN.TFRT.IN")] <- "fertility"
+names(newdt)[which(names(newdt) == "SE.ADT.LITR.FE.ZS")] <- "literacy_fem"
+names(newdt)[which(names(newdt) == "SL.UEM.TOTL.FE.ZS")] <- "unemploy_fem"
+names(newdt)[which(names(newdt) == "SL.AGR.EMPL.FE.ZS")] <- "agri_fem"
+names(newdt)[which(names(newdt) == "SL.IND.EMPL.FE.ZS")] <- "indus_fem"
+names(newdt)[which(names(newdt) == "SL.SRV.EMPL.FE.ZS")] <- "serv_fem"
+names(newdt)[which(names(newdt) == "SL.EMP.VULN.FE.ZS")] <- "vulemp_fem"
+
+# merge datasets
+
+names(newdt)[which(names(newdt) == "iso3c")] <- "stateid"
+newdt1 <- subset(newdt, select = c(stateid, year, fertility, literacy_fem, unemploy_fem, agri_fem, indus_fem, serv_fem, vulemp_fem ))
+newdt2 <- newdt1[176:9310,]
+as.data.frame(newdt2)
+all<- merge(data, newdt2, by.x = c("stateid", "year"), by.y = c("stateid", "year"), all.y=T,all.x=F,sort=T)
+as.data.frame(all)
+
+```
+
+```{r}
+# rename public spending on education
+all <- all %>% 
+  rename(spendedc = public_spending_on_education__to)
+
+```
+
+### subset dataset
+```{r}
+# problem: different datasets cannot compare in likelihood ratio test
+# I have to use subset to create a new dataset for specific explanatory variables otherwise I will have 0 obs if I use na.omit for all the variables.
+library(dplyr)
+all.s <- subset(all, select = c(stateid, year, fertility, vulemp_fem, 
+         wecon, lwecon1, lwecon2, lwecon3,
+         wosoc, lwosoc1, lwosoc2, lwosoc3, 
+         wopol, lwopol1, lwopol2, lwopol3, 
+         lsanction_hse, laggdplog,lagsanctiongdp, lagsanctioncost,
+         lnsanction_hse_dur, lagsanctdurgdp, lmultisanct, laghumansanction,
+         lagpolity2, lagtradelog, lagwar, lagcwar, wdifemlabor, d.wdifemlabor, peace, 
+         asia, lamerica, ssafrica, nafrme))
+
+### lag one year for fertility and vulemp_fem
+all.s <- all.s %>%
+   mutate(lagfert = lag(fertility, n = 1, default = NA))
+
+all.s <- all.s %>%
+   mutate(lagvulempfem = lag(vulemp_fem, n = 1, default = NA))
+
+```
+
+## combine V-dem data
+### load v-dem
+
+```{r}
+library("readxl")
+vdem <- read_excel("add_vdem.xlsx")
+new<- merge(all.s, vdem, by.x = c("stateid", "year"), by.y = c("stateid", "year"), new.y=T,all.x=F,sort=T)
+as.data.frame(new)
+```
+main IV
+```{r}
+png(file="gender.png")
+hist(new$gen_interv, main="gender power", ylim = range(0,400),
+      xlab="interval 0-4")
+dev.off()
+```
+
+```{r}
+png(file="sanc.png")
+hist(new$lsanction_hse, type = "p", lwd = 0.5,
+     main="Economic Sanctions", ylim = range(0,1500),
+     xlab="dummy")
+dev.off()
+```
+
+
+```{r}
+png(file="hmsanc.png")
+hist(new$laghumansanction, type = "p", lwd = 0.5,
+     main="Humanitarian Sanctions", ylim = range(0,1500),
+     xlab="dummy")
+dev.off()
+```
+
+
+# Logit
+
+```{r}
+# eco
+ecomodel1 <- polr(wecon ~ lsanction_hse + lnsanction_hse_dur + lagsanctioncost + laghumansanction + lagfert + laggdplog + lagpolity2 + lagtradelog + lagwar + lagcwar + peace + asia + lamerica + ssafrica + nafrme, data=new, method = "logistic", Hess=T)
+
+# political
+
+pomodel1 <- polr(wopol ~ lsanction_hse + lnsanction_hse_dur + lagsanctioncost + laghumansanction + lagfert + laggdplog + lagpolity2 + lagtradelog + lagwar + lagcwar + peace + asia + lamerica + ssafrica + nafrme, data=new, method = "logistic", Hess=T)
+
+#social
+somodel1 <- polr(wosoc ~ lsanction_hse + lnsanction_hse_dur + lagsanctioncost + laghumansanction + lagfert + laggdplog + lagpolity2 + lagtradelog + lagwar + lagcwar + peace + asia + lamerica + ssafrica + nafrme, data=new, method = "logistic", Hess=T)
+```
+
+```{r}
+summary(ecomodel1)
+stargazer(ecomodel1,type='text')
+```
+```{r}
+stargazer(ecomodel1, pomodel1, somodel1, type='latex', digits = 3,no.space = TRUE,
+          column.sep.width = "1pt", font.size = "small",
+          title = "Sanctions Effects on Women’s Rights",
+          dep.var.labels = c("Economic Rights",  "Political Rights", "Social Rights"),
+          covariate.labels = c("Economic Sanction", "Sanction Duration", "Sanction Cost", "Humanitarian Sanction", "Fertility Rate", "GDP Per Capita", "Democracy", "Trade", "War", "Civil War", "Peace Years", "Asia/Pacific", "Latin America/Caribbean", "Sub-Saharan Africa", "M.East/N.Africa")) 
+```
+
+
+
+
